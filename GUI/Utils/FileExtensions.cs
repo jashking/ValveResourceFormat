@@ -2,14 +2,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SteamDatabase.ValvePak;
 using ValveResourceFormat;
 
 namespace GUI.Utils
 {
     internal static class FileExtensions
     {
-        private static Dictionary<string, Package> CachedPackages = new Dictionary<string, Package>();
-        private static Dictionary<string, Resource> CachedResources = new Dictionary<string, Resource>();
+        private static readonly Dictionary<string, Package> CachedPackages = new Dictionary<string, Package>();
+        private static readonly Dictionary<string, Resource> CachedResources = new Dictionary<string, Resource>();
 
         // http://stackoverflow.com/a/4975942/272647
         public static string ToFileSizeString(this uint byteCount)

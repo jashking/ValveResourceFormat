@@ -8,6 +8,7 @@ using ValveResourceFormat;
 using ValveResourceFormat.ResourceTypes;
 using ValveResourceFormat.Blocks;
 using System.Text;
+using SteamDatabase.ValvePak;
 
 namespace Decompiler
 {
@@ -119,6 +120,13 @@ namespace Decompiler
             if (extension == ".vcs")
             {
                 ParseVCS(path);
+
+                return;
+            }
+
+            if (extension == ".vfont")
+            {
+                ParseVFont(path);
 
                 return;
             }
@@ -402,6 +410,40 @@ namespace Decompiler
             shader.Dispose();
         }
 
+        private static void ParseVFont(string path)
+        {
+            lock (ConsoleWriterLock)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("--- Loading font file \"{0}\" ---", path);
+                Console.ResetColor();
+            }
+
+            var font = new ValveFont();
+
+            try
+            {
+                var output = font.Read(path);
+
+                if (Options.OutputFile != null)
+                {
+                    var fileName = Path.GetFileName(path);
+                    fileName = Path.ChangeExtension(fileName, "ttf");
+
+                    DumpFile(fileName, output);
+                }
+            }
+            catch (Exception e)
+            {
+                lock (ConsoleWriterLock)
+                {
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine(e);
+                    Console.ResetColor();
+                }
+            }
+        }
+        
         private static void ParseVPK(string path)
         {
             lock (ConsoleWriterLock)

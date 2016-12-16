@@ -44,8 +44,8 @@ vwnod    | WorldNode               | :+1:
 vvis     | WorldVisibility         | No
 vents    | EntityLump              | No
 vsurf    | Surface Properties      | No
-vsndevts | Sound Event Script      | No
-vsndstck | Sound Stack Script      | No
+vsndevts | Sound Event Script      | :+1: KV1, :-1: KV3
+vsndstck | Sound Stack Script      | :+1: KV1, :-1: KV3
 vrmap    | Resource Remap Table    | No
 vcss     | Panorama Style          | :+1:
 vxml     | Panorama Layout         | :+1:
@@ -56,9 +56,9 @@ vmap     | Map                     | :+1:
 
 Ext      | Name                    | Support
 -------- | ----------------------- | -------
-vpk      | Pak (package)           | Supported by `Package`
+vpk      | Pak (package)           | :+1: Handled by [ValvePak](https://github.com/SteamDatabase/ValvePak)
 vcs      | Compiled Shader         | Partially supported by `CompiledShader`
-vfont    | Bitmap Font             | Not in a resource format, it's "encrypted", has `VFONT1` at the end of file
+vfont    | Bitmap Font             | :+1: Decrypts `VFONT1`, supported in Source 1 (CS:GO) and Source 2 (Dota 2).
 
 Not all formats are 100% supported, some parameters are still unknown and not fully understood.
 

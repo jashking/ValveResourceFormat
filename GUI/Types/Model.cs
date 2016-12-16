@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using GUI.Types.Renderer;
 using GUI.Utils;
 using OpenTK;
+using SteamDatabase.ValvePak;
 using ValveResourceFormat;
 using ValveResourceFormat.Blocks;
 using ValveResourceFormat.ResourceTypes;
 using ValveResourceFormat.ResourceTypes.NTROSerialization;
+using Vector4 = OpenTK.Vector4;
 
 namespace GUI.Types
 {
@@ -19,7 +21,7 @@ namespace GUI.Types
             Resource = resource;
         }
 
-        public void LoadMeshes(Renderer.Renderer renderer, string path, Matrix4 transform, OpenTK.Vector4 tintColor, Package currentPackage = null, string skin = null)
+        public void LoadMeshes(Renderer.Renderer renderer, string path, Matrix4 transform, Vector4 tintColor, Package currentPackage = null, string skin = null)
         {
             var data = (NTRO)Resource.Blocks[BlockType.DATA];
 
@@ -72,7 +74,7 @@ namespace GUI.Types
                     Resource = newResource,
                     Transform = transform,
                     TintColor = tintColor,
-                    SkinMaterials = skinMaterials,
+                    SkinMaterials = skinMaterials
                 });
 
                 // TODO: Only first, again.
@@ -80,19 +82,21 @@ namespace GUI.Types
             }
         }
 
-        public string GetAnimationGroup()
+        public string[] GetAnimationGroups()
         {
             var data = (NTRO)Resource.Blocks[BlockType.DATA];
 
             var refAnimGroups = (NTROArray)data.Output["m_refAnimGroups"];
 
-            if (refAnimGroups.Count > 0)
+            var refs = refAnimGroups.ToArray<ResourceExtRefList.ResourceReferenceInfo>();
+            var paths = new string[refs.Length];
+
+            for (var i = 0; i < refs.Length; i++)
             {
-                var animGroup = ((NTROValue<ResourceExtRefList.ResourceReferenceInfo>)refAnimGroups[0]).Value;
-                //return FileExtensions.FindResourcePath(animGroup.Name);
+                paths[i] = refs[i].Name;
             }
 
-            return string.Empty;
+            return paths;
         }
     }
 }

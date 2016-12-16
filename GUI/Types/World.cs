@@ -1,5 +1,5 @@
 ﻿using System;
-using GUI.Types.Renderer;
+using System.Globalization;
 using GUI.Utils;
 using OpenTK;
 using ValveResourceFormat;
@@ -7,8 +7,8 @@ using ValveResourceFormat.Blocks;
 using ValveResourceFormat.ResourceTypes;
 using ValveResourceFormat.ResourceTypes.NTROSerialization;
 using Vector3 = OpenTK.Vector3;
-using Vector4 = ValveResourceFormat.ResourceTypes.NTROSerialization.Vector4;
-using System.Globalization;
+using Vector4 = OpenTK.Vector4;
+using SteamDatabase.ValvePak;
 
 namespace GUI.Types
 {
@@ -16,7 +16,7 @@ namespace GUI.Types
     {
         private readonly Resource Resource;
 
-        private static int anonymousCameraCount = 0;
+        private static int anonymousCameraCount;
 
         public World(Resource resource)
         {
@@ -47,6 +47,7 @@ namespace GUI.Types
                     node.AddMeshes(renderer, path, package);
                 }
             }
+
             var entityLumps = (NTROArray)data.Output["m_entityLumps"];
             foreach (var lump in entityLumps)
             {
@@ -129,12 +130,13 @@ namespace GUI.Types
                             break;
                     }
                 }
+
                 if (scale == string.Empty || position == string.Empty || angles == string.Empty)
                 {
                     continue;
                 }
 
-                if (classname == "point_camera" || model != string.Empty)
+                if (classname == "point_camera" || classname == "vr_teleport_marker" || model != string.Empty)
                 {
                     var scaleMatrix = Matrix4.CreateScale(ParseCoordinates(scale));
                     var positionMatrix = Matrix4.CreateTranslation(ParseCoordinates(position));
@@ -146,7 +148,7 @@ namespace GUI.Types
 
                     var megaMatrix = scaleMatrix * rotationMatrix * positionMatrix;
 
-                    var objColor = OpenTK.Vector4.One;
+                    var objColor = Vector4.One;
                     // Parse colour if present
                     if (colour.Length == 4)
                     {
@@ -154,6 +156,12 @@ namespace GUI.Types
                         {
                             objColor[i] = colour[i] / 255.0f;
                         }
+                    }
+
+                    //This model is hardcoded into the FGD
+                    if (classname == "vr_teleport_marker")
+                    {
+                        model = "models/effects/teleport/teleport_marker.vmdl";
                     }
 
                     if (classname == "point_camera")

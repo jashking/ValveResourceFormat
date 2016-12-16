@@ -7,6 +7,7 @@ using ValveResourceFormat.Blocks;
 using ValveResourceFormat.ResourceTypes;
 using ValveResourceFormat.ResourceTypes.NTROSerialization;
 using Vector4 = ValveResourceFormat.ResourceTypes.NTROSerialization.Vector4;
+using SteamDatabase.ValvePak;
 
 namespace GUI.Types
 {
@@ -103,7 +104,7 @@ namespace GUI.Types
                     {
                         Resource = newResource,
                         Transform = matrix,
-                        TintColor = tintColor,
+                        TintColor = tintColor
                     });
                 }
             }

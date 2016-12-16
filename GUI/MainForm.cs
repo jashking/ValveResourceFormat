@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -11,19 +12,19 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using GUI.Controls;
 using GUI.Forms;
+using GUI.Types;
 using GUI.Types.Audio;
 using GUI.Types.Renderer;
+using GUI.Types.Renderer.Animation;
 using GUI.Utils;
+using OpenTK;
+using SteamDatabase.ValvePak;
 using ValveResourceFormat;
 using ValveResourceFormat.Blocks;
 using ValveResourceFormat.KeyValues;
 using ValveResourceFormat.ResourceTypes;
 using Model = GUI.Types.Model;
-using World = GUI.Types.World;
-using WorldNode = GUI.Types.WorldNode;
 using Texture = ValveResourceFormat.ResourceTypes.Texture;
-using System.Drawing.Imaging;
-using OpenTK;
 
 namespace GUI
 {
@@ -66,6 +67,23 @@ namespace GUI
             if (keyData == (Keys.Control | Keys.F))
             {
                 findToolStripButton.PerformClick();
+            }
+
+            //if the user presses CTRL + W, and there is a tab open, close the active tab
+            if (keyData == (Keys.Control | Keys.W) && mainTabs.SelectedTab != null)
+            {
+                mainTabs.TabPages.Remove(mainTabs.SelectedTab);
+
+                // enable/disable the search button as necessary
+                if (mainTabs.TabCount > 0 && mainTabs.SelectedTab != null)
+                {
+                    var treeView = mainTabs.SelectedTab.Controls["TreeViewWithSearchResults"] as TreeViewWithSearchResults;
+                    findToolStripButton.Enabled = treeView != null;
+                }
+                else
+                {
+                    findToolStripButton.Enabled = false;
+                }
             }
 
             return base.ProcessCmdKey(ref msg, keyData);
@@ -245,8 +263,7 @@ namespace GUI
                             control.SetImage(tex.GenerateBitmap(), Path.GetFileNameWithoutExtension(fileName), tex.Width, tex.Height);
 
                             tab2.Controls.Add(control);
-                            Invoke(new ExportDel(AddToExport), new object[] { $"Export {Path.GetFileName(fileName)} as an image", fileName, resource });
-
+                            Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as an image", fileName, resource);
                         }
                         catch (Exception e)
                         {
@@ -281,20 +298,20 @@ namespace GUI
 
                         break;
                     case ResourceType.PanoramaLayout:
-                        Invoke(new ExportDel(AddToExport), new object[] { $"Export {Path.GetFileName(fileName)} as XML", fileName, resource });
+                        Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as XML", fileName, resource);
                         break;
                     case ResourceType.PanoramaScript:
-                        Invoke(new ExportDel(AddToExport), new object[] { $"Export {Path.GetFileName(fileName)} as JS", fileName, resource });
+                        Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as JS", fileName, resource);
                         break;
                     case ResourceType.PanoramaStyle:
-                        Invoke(new ExportDel(AddToExport), new object[] { $"Export {Path.GetFileName(fileName)} as CSS", fileName, resource });
+                        Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as CSS", fileName, resource);
                         break;
                     case ResourceType.Sound:
                         var soundTab = new TabPage("SOUND");
                         var ap = new AudioPlayer(resource, soundTab);
                         resTabs.TabPages.Add(soundTab);
 
-                        Invoke(new ExportDel(AddToExport), new object[] { $"Export {Path.GetFileName(fileName)} as {((Sound)resource.Blocks[BlockType.DATA]).Type}", fileName, resource });
+                        Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as {((Sound)resource.Blocks[BlockType.DATA]).Type}", fileName, resource);
 
                         break;
                     case ResourceType.World:
@@ -318,21 +335,32 @@ namespace GUI
                         resTabs.TabPages.Add(nodemeshTab);
                         break;
                     case ResourceType.Model:
+                        // Create model
                         var model = new Model(resource);
 
-                        var animGroupPath = model.GetAnimationGroup();
-                        if (!string.IsNullOrEmpty(animGroupPath))
-                        {
-                            var animGroup = new Resource();
-                            animGroup.Read(animGroupPath);
+                        // Create skeleton
+                        var skeleton = new Skeleton(resource);
 
-                            var animGroupLoader = new AnimationGroupLoader(animGroup, fileName);
-                        }
-
+                        // Create tab
                         var modelmeshTab = new TabPage("MESH");
                         var modelmv = new Renderer(mainTabs, fileName, currentPackage);
                         model.LoadMeshes(modelmv, fileName, Matrix4.Identity, Vector4.One, currentPackage);
 
+                        // Add skeleton to renderer
+                        modelmv.SetSkeleton(skeleton);
+
+                        // Add animations if available
+                        var animGroupPaths = model.GetAnimationGroups();
+                        foreach (var animGroupPath in animGroupPaths)
+                        {
+                            var animGroup = FileExtensions.LoadFileByAnyMeansNecessary(animGroupPath + "_c", fileName, currentPackage);
+
+                            var animGroupLoader = new AnimationGroupLoader(animGroup, fileName, skeleton);
+
+                            modelmv.AddAnimations(animGroupLoader.AnimationList);
+                        }
+
+                        //Initialise OpenGL
                         var modelglControl = modelmv.CreateGL();
                         modelmeshTab.Controls.Add(modelglControl);
                         resTabs.TabPages.Add(modelmeshTab);
@@ -344,6 +372,7 @@ namespace GUI
                             break;
                         }
 
+                        Invoke(new ExportDel(AddToExport), $"Export {Path.GetFileName(fileName)} as OBJ", fileName, resource);
                         var meshTab = new TabPage("MESH");
                         var mv = new Renderer(mainTabs, fileName, currentPackage);
                         mv.AddMeshObject(new MeshObject { Resource = resource });
@@ -616,7 +645,28 @@ namespace GUI
             else
             {
                 //We are a folder
-                MessageBox.Show("Folder Extraction coming Soon™");
+                var dialog = new FolderBrowserDialog();
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    foreach (TreeNode node in selectedNode.Nodes)
+                    {
+                        if (node.Tag.GetType() == typeof(PackageEntry))
+                        {
+                            var file = node.Tag as PackageEntry;
+                            Console.WriteLine(node.Text);
+                            using (var stream = new FileStream(dialog.SelectedPath + Path.DirectorySeparatorChar + file.FileName + "." + file.TypeName, FileMode.Create))
+                            {
+                                byte[] output;
+                                package.ReadEntry(file, out output);
+                                stream.Write(output, 0, output.Length);
+                            }
+                        }
+                        else
+                        {
+                            MessageBox.Show("Nested Folder Extract Soon (tm)");
+                        }
+                    }
+                }
             }
         }
 
@@ -647,7 +697,9 @@ namespace GUI
         }
 
         private delegate void ExportDel(string name, string filename, Resource resource);
-        private void AddToExport(string name, string filename, Resource resource) {
+
+        private void AddToExport(string name, string filename, Resource resource)
+        {
             exportToolStripButton.Enabled = true;
 
             var ts = new ToolStripMenuItem();
@@ -660,6 +712,7 @@ namespace GUI
 
             exportToolStripButton.DropDownItems.Add(ts);
         }
+
         private void exportToolStripMenuItem_Click(object sender, EventArgs e)
         {
             //ToolTipText is the full filename
@@ -673,19 +726,22 @@ namespace GUI
             {
                 case ResourceType.Sound:
                     //WAV or MP3
-                    extensions = new string[] { ((Sound)resource.Blocks[BlockType.DATA]).Type.ToString().ToLower() };
+                    extensions = new[] { ((Sound)resource.Blocks[BlockType.DATA]).Type.ToString().ToLower() };
                     break;
                 case ResourceType.Texture:
-                    extensions = new string[] { "png", "jpg", "tiff", "bmp" };
+                    extensions = new[] { "png", "jpg", "tiff", "bmp" };
                     break;
                 case ResourceType.PanoramaLayout:
-                    extensions = new string[] { "xml", "vxml" };
+                    extensions = new[] { "xml", "vxml" };
                     break;
                 case ResourceType.PanoramaScript:
-                    extensions = new string[] { "js", "vjs" };
+                    extensions = new[] { "js", "vjs" };
                     break;
                 case ResourceType.PanoramaStyle:
-                    extensions = new string[] { "css", "vcss" };
+                    extensions = new[] { "css", "vcss" };
+                    break;
+                case ResourceType.Mesh:
+                    extensions = new[] { "obj" };
                     break;
             }
 
@@ -698,7 +754,7 @@ namespace GUI
                 dialog.DefaultExt = extensions[0];
 
                 var filter = string.Empty;
-                foreach (string extension in extensions)
+                foreach (var extension in extensions)
                 {
                     filter += $"{extension} files (*.{extension})|*.{extension}|";
                 }
@@ -742,10 +798,76 @@ namespace GUI
                                 var panoramaData = ((Panorama)resource.Blocks[BlockType.DATA]).Data;
                                 stream.Write(panoramaData, 0, panoramaData.Length);
                                 break;
+                            case ResourceType.Mesh:
+                                var mesh = (VBIB)resource.Blocks[BlockType.VBIB];
+                                using (var objStream = new StreamWriter(stream))
+                                {
+                                    objStream.WriteLine($"# vertex buffers {mesh.VertexBuffers.Count}");
+                                    objStream.WriteLine($"# index buffers {mesh.IndexBuffers.Count}");
+                                    if (mesh.VertexBuffers.Count != mesh.IndexBuffers.Count)
+                                    {
+                                        throw new InvalidDataException("What.");
+                                    }
+
+                                    uint indexCount = 1;
+                                    for (var i = 0; i < mesh.VertexBuffers.Count; i++)
+                                    {
+                                        var vertexBuffer = mesh.VertexBuffers[i];
+                                        objStream.WriteLine($"# Vertex Buffer {i}. Count: {vertexBuffer.Count}, Size: {vertexBuffer.Size}");
+                                        for (uint j = 0; j < vertexBuffer.Count; j++)
+                                        {
+                                            foreach (var attribute in vertexBuffer.Attributes)
+                                            {
+                                                switch (attribute.Name)
+                                                {
+                                                    case "POSITION":
+                                                        var posArray = new float[3];
+                                                        Buffer.BlockCopy(vertexBuffer.Buffer, (int)(j * vertexBuffer.Size) + (int)attribute.Offset, posArray, 0, 12);
+                                                        objStream.WriteLine($"v {posArray[0]} {posArray[1]} {posArray[2]}");
+                                                        break;
+                                                }
+                                            }
+                                        }
+
+                                        if (i > 0)
+                                        {
+                                            indexCount += mesh.VertexBuffers[i - 1].Count;
+                                        }
+
+                                        Console.WriteLine($"IndexCount: {indexCount}");
+                                        var indexBuffer = mesh.IndexBuffers[i];
+                                        objStream.WriteLine($"# Index Buffer {i}. Count: {indexBuffer.Count}, Size: {indexBuffer.Size}");
+                                        if (indexBuffer.Size == 2)
+                                        {
+                                            var indexArray = new ushort[indexBuffer.Count];
+                                            Buffer.BlockCopy(indexBuffer.Buffer, 0, indexArray, 0, indexBuffer.Buffer.Length);
+                                            for (var j = 0; j < indexBuffer.Count; j += 3)
+                                            {
+                                                objStream.WriteLine($"f {indexArray[j] + indexCount} {indexArray[j + 1] + indexCount} {indexArray[j + 2] + indexCount}");
+                                            }
+                                        }
+                                        else if (indexBuffer.Size == 4)
+                                        {
+                                            var indexArray = new uint[indexBuffer.Count];
+                                            Buffer.BlockCopy(indexBuffer.Buffer, 0, indexArray, 0, indexBuffer.Buffer.Length);
+                                            for (var j = 0; j < indexBuffer.Count; j += 3)
+                                            {
+                                                objStream.WriteLine($"f {indexArray[j] + indexCount} {indexArray[j + 1] + indexCount} {indexArray[j + 2] + indexCount}");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            throw new InvalidDataException("Index size isn't 2 or 4, dafuq.");
+                                        }
+                                    }
+                                }
+
+                                break;
                         }
                     }
                 }
             }
+            Console.WriteLine($"Export requested for {fileName} Complete");
         }
     }
 }

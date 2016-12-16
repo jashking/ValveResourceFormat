@@ -41,9 +41,9 @@
     <Reference Include="System.Drawing" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FontTest.cs" />
     <Compile Include="ShaderTest.cs" />
     <Compile Include="Test.cs" />
-    <Compile Include="PackageTest.cs" />
     <Compile Include="KeyValuesTest.cs" />
     <Compile Include="TextureTests.cs" />
   </ItemGroup>
